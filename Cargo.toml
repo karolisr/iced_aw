@@ -74,7 +74,7 @@ web-time = "1.1.0"
 #rev = "b474a2b7a763dcde6a377cb409001a7b5285ee8d"
 version = "0.13.1"
 default-features = false
-features = ["advanced"]
+features = ["advanced", "wgpu"]
 
 [profile.dev.package."*"]
 opt-level = 2
