@@ -37,7 +37,7 @@ impl NumberInputDemo {
     fn update(&mut self, message: self::Message) {
         match message {
             Message::NumInpChanged(val) => {
-                println!("Value changed to {:?}", val);
+                println!("Value changed to {val:?}");
                 self.value = val;
             }
             Message::NumInpSubmitted => {
@@ -46,7 +46,7 @@ impl NumberInputDemo {
         }
     }
 
-    fn view(&self) -> Element<Message> {
+    fn view(&'_ self) -> Element<'_, Message> {
         let lb_minute = Text::new("Number Input:");
         let txt_minute = number_input(&self.value, 0..=10, Message::NumInpChanged)
             .style(number_input::number_input::primary)

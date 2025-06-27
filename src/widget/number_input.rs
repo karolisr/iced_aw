@@ -924,7 +924,7 @@ where
                         if let Some(on_change) = &self.on_change {
                             shell.publish(on_change(value));
                         }
-                    };
+                    }
                     shell.invalidate_layout();
                 }
                 InternalMessage::OnSubmit(result) => {
@@ -936,7 +936,7 @@ where
                     }
                     if let Some(on_submit) = &self.on_submit {
                         shell.publish(on_submit.clone());
-                    };
+                    }
                     shell.invalidate_layout();
                 }
                 InternalMessage::OnPaste(value) => {
@@ -945,7 +945,7 @@ where
                         if let Some(on_paste) = &self.on_paste {
                             shell.publish(on_paste(value));
                         }
-                    };
+                    }
                     shell.invalidate_layout();
                 }
             }

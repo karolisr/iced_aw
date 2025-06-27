@@ -128,7 +128,7 @@ where
     }
 
     /// Force redraw all components if the internal state was changed
-    fn clear_cache(&mut self) {
+    fn clear_cache(&self) {
         self.state.clear_cache();
     }
 
@@ -1707,7 +1707,7 @@ impl State {
     ///
     /// If the color has changed, empty all canvas caches
     /// as they (unfortunately) do not depend on the picker state.
-    fn clear_cache(&mut self) {
+    fn clear_cache(&self) {
         self.sat_value_canvas_cache.clear();
         self.hue_canvas_cache.clear();
     }

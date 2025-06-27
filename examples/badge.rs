@@ -37,7 +37,7 @@ impl Default for BadgeExample {
 impl BadgeExample {
     fn update(&mut self, _message: Message) {}
 
-    fn view(&self) -> Element<Message> {
+    fn view(&'_ self) -> Element<'_, Message> {
         let content = Column::new()
             .push(Text::new("Messages").size(32))
             .spacing(10)

@@ -754,7 +754,7 @@ fn draw_tab<Theme, Renderer>(
 
             renderer.fill_text(
                 iced::advanced::text::Text {
-                    content: text.to_string(),
+                    content: text.into(),
                     bounds: Size::new(text_bounds.width, text_bounds.height),
                     size: Pixels(text_data.1),
                     font: text_data.0,
@@ -819,7 +819,7 @@ fn draw_tab<Theme, Renderer>(
 
             renderer.fill_text(
                 iced::advanced::text::Text {
-                    content: text.to_string(),
+                    content: text.into(),
                     bounds: Size::new(text_bounds.width, text_bounds.height),
                     size: Pixels(text_data.1),
                     font: text_data.0,
@@ -834,7 +834,7 @@ fn draw_tab<Theme, Renderer>(
                 text_bounds,
             );
         }
-    };
+    }
 
     if let Some(cross_layout) = children.next() {
         let cross_bounds = cross_layout.bounds();
@@ -873,7 +873,7 @@ fn draw_tab<Theme, Renderer>(
                     .unwrap_or(Background::Color(Color::TRANSPARENT)),
             );
         }
-    };
+    }
 }
 
 impl<'a, Message, TabId, Theme, Renderer> From<TabBar<'a, Message, TabId, Theme, Renderer>>

@@ -35,7 +35,7 @@ impl SpinnerExample {
         }
     }
 
-    fn view(&self) -> Element<Message> {
+    fn view(&'_ self) -> Element<'_, Message> {
         column![
             container(Spinner::new())
                 .width(Length::Fill)

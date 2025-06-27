@@ -35,7 +35,7 @@ impl SlideBarExample {
         self.value = v;
     }
 
-    fn view(&self) -> Element<Message> {
+    fn view(&'_ self) -> Element<'_, Message> {
         let bar = SlideBar::new(0..=100, self.value, Message::SliderBarChange).width(100.0);
 
         let content_all = Column::new()

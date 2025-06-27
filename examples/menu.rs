@@ -473,21 +473,21 @@ fn base_button<'a>(
 }
 
 fn labeled_button(
-    label: &str,
+    label: &'_ str,
     msg: Message,
-) -> button::Button<Message, iced::Theme, iced::Renderer> {
+) -> button::Button<'_, Message, iced::Theme, iced::Renderer> {
     base_button(text(label).align_y(alignment::Vertical::Center), msg)
 }
 
-fn debug_button(label: &str) -> button::Button<Message, iced::Theme, iced::Renderer> {
+fn debug_button(label: &'_ str) -> button::Button<'_, Message, iced::Theme, iced::Renderer> {
     labeled_button(label, Message::Debug(label.into())).width(Length::Fill)
 }
 
-fn debug_button_s(label: &str) -> button::Button<Message, iced::Theme, iced::Renderer> {
+fn debug_button_s(label: &'_ str) -> button::Button<'_, Message, iced::Theme, iced::Renderer> {
     labeled_button(label, Message::Debug(label.into())).width(Length::Shrink)
 }
 
-fn submenu_button(label: &str) -> button::Button<Message, iced::Theme, iced::Renderer> {
+fn submenu_button(label: &'_ str) -> button::Button<'_, Message, iced::Theme, iced::Renderer> {
     base_button(
         row![
             text(label)

@@ -37,17 +37,17 @@ impl TypedInputDemo {
     fn update(&mut self, message: self::Message) {
         match message {
             Message::TypedInpChanged(value) => {
-                println!("Value changed to {}", value);
+                println!("Value changed to {value}");
                 self.value = value;
             }
-            Message::TypedInpSubmit(Ok(value)) => println!("Value submitted: {}", value),
+            Message::TypedInpSubmit(Ok(value)) => println!("Value submitted: {value}"),
             Message::TypedInpSubmit(Err(text)) => {
-                println!("Value submitted while invalid: {}", text)
+                println!("Value submitted while invalid: {text}")
             }
         }
     }
 
-    fn view(&self) -> Element<Message> {
+    fn view(&'_ self) -> Element<'_, Message> {
         let lb_minute = Text::new("Typed Input:");
         let txt_minute = typed_input::TypedInput::new("Placeholder", &self.value)
             .on_input(Message::TypedInpChanged)
