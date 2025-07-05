@@ -63,6 +63,7 @@ pub use tab_bar_position::TabBarPosition;
 /// ```
 ///
 #[allow(missing_debug_implementations)]
+#[allow(clippy::struct_field_names)]
 pub struct Tabs<'a, Message, TabId, Theme = iced::Theme, Renderer = iced::Renderer>
 where
     Renderer: 'a + renderer::Renderer + iced::advanced::text::Renderer,

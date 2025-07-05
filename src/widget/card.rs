@@ -503,7 +503,7 @@ where
             footer
                 .as_widget()
                 .operate(&mut state.children[2], foot_layout, renderer, operation);
-        };
+        }
     }
 
     fn draw(

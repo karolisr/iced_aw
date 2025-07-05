@@ -39,7 +39,7 @@ impl TabBarExample {
     fn update(&mut self, message: Message) {
         match message {
             Message::TabSelected(index) => {
-                println!("Tab selected: {}", index);
+                println!("Tab selected: {index}");
                 self.active_tab = index
             }
             Message::TabClosed(index) => {
@@ -69,7 +69,7 @@ impl TabBarExample {
         }
     }
 
-    fn view(&self) -> Element<Message> {
+    fn view(&'_ self) -> Element<'_, Message> {
         Column::new()
             .push(
                 Row::new()

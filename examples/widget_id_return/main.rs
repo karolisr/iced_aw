@@ -44,11 +44,11 @@ impl NumberInputDemo {
         self.value[id].value = val.get_data();
     }
 
-    fn view(&self) -> Element<Message> {
+    fn view(&'_ self) -> Element<'_, Message> {
         let mut column1 = Column::new();
 
         for (id, val) in self.value.iter().enumerate() {
-            let lb_minute = Text::new(format!("Number Input {}:", id));
+            let lb_minute = Text::new(format!("Number Input {id}:"));
             let txt_minute = val.view(id, 1.0, 255.0, 0.5, Message::GenericF32Input, None);
 
             column1 = column1.push(

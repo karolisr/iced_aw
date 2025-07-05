@@ -73,7 +73,7 @@ impl Example {
         }
     }
 
-    fn view(&self) -> Element<Message> {
+    fn view(&'_ self) -> Element<'_, Message> {
         let selection_list = SelectionList::new_with(
             &self.vec[..],
             Message::LanguageSelected,
