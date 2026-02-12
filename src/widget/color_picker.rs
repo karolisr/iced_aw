@@ -9,11 +9,14 @@ use super::overlay::color_picker::{
 };
 
 use iced_core::{
+    Clipboard, Color, Element, Event, Layout, Length, Point, Rectangle, Shell, Vector, Widget,
     layout::{Limits, Node},
     mouse::{self, Cursor},
     overlay, renderer,
-    widget::tree::{self, Tag, Tree},
-    Clipboard, Color, Element, Event, Layout, Length, Point, Rectangle, Shell, Vector, Widget,
+    widget::{
+        Operation,
+        tree::{self, Tag, Tree},
+    },
 };
 use iced_widget::Renderer;
 
@@ -59,6 +62,8 @@ where
     on_cancel: Message,
     /// The function that produces a message when the submit button of the [`ColorPickerOverlay`] is pressed.
     on_submit: Box<dyn Fn(Color) -> Message>,
+    /// Optional function that produces a message when the color changes during selection (real-time updates).
+    on_color_change: Option<Box<dyn Fn(Color) -> Message>>,
     /// The style of the [`ColorPickerOverlay`].
     class: <Theme as style::color_picker::Catalog>::Class<'a>,
     /// The buttons of the overlay.
@@ -101,9 +106,20 @@ where
             underlay: underlay.into(),
             on_cancel,
             on_submit: Box::new(on_submit),
+            on_color_change: None,
             class: <Theme as style::color_picker::Catalog>::default(),
             overlay_state: ColorPickerOverlayButtons::default().into(),
         }
+    }
+
+    /// Sets a callback that will be called whenever the color changes during selection (real-time updates).
+    #[must_use]
+    pub fn on_color_change<F>(mut self, on_color_change: F) -> Self
+    where
+        F: 'static + Fn(Color) -> Message,
+    {
+        self.on_color_change = Some(Box::new(on_color_change));
+        self
     }
 
     /// Sets the style of the [`ColorPicker`].
@@ -264,6 +280,18 @@ where
         );
     }
 
+    fn operate<'b>(
+        &'b mut self,
+        state: &'b mut Tree,
+        layout: Layout<'_>,
+        renderer: &Renderer,
+        operation: &mut dyn Operation<()>,
+    ) {
+        self.underlay
+            .as_widget_mut()
+            .operate(&mut state.children[0], layout, renderer, operation);
+    }
+
     fn overlay<'b>(
         &'b mut self,
         tree: &'b mut Tree,
@@ -292,6 +320,7 @@ where
                 picker_state,
                 self.on_cancel.clone(),
                 &self.on_submit,
+                self.on_color_change.as_deref(),
                 position,
                 &self.class,
                 &mut tree.children[1],
@@ -313,5 +342,81 @@ where
 {
     fn from(color_picker: ColorPicker<'a, Message, Theme>) -> Self {
         Element::new(color_picker)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Clone, Debug, PartialEq)]
+    enum TestMessage {
+        Cancel,
+        Submit(Color),
+    }
+
+    type TestColorPicker<'a> = ColorPicker<'a, TestMessage, iced_widget::Theme>;
+
+    fn create_test_button() -> iced_widget::Button<'static, TestMessage, iced_widget::Theme> {
+        iced_widget::button(iced_widget::text::Text::new("Pick"))
+    }
+
+    #[test]
+    fn color_picker_new_with_picker_hidden() {
+        let color = Color::from_rgb(0.5, 0.5, 0.5);
+        let button = create_test_button();
+
+        let picker = TestColorPicker::new(
+            false,
+            color,
+            button,
+            TestMessage::Cancel,
+            TestMessage::Submit,
+        );
+
+        assert!(!picker.show_picker);
+        assert_eq!(picker.color, color);
+    }
+
+    #[test]
+    fn color_picker_new_with_picker_shown() {
+        let color = Color::from_rgb(0.3, 0.6, 0.9);
+        let button = create_test_button();
+
+        let picker = TestColorPicker::new(
+            true,
+            color,
+            button,
+            TestMessage::Cancel,
+            TestMessage::Submit,
+        );
+
+        assert!(picker.show_picker);
+        assert_eq!(picker.color, color);
+    }
+
+    #[test]
+    fn color_picker_state_new() {
+        let color = Color::from_rgb(0.5, 0.5, 0.5);
+        let state = State::new(color);
+
+        assert!(!state.old_show_picker);
+    }
+
+    #[test]
+    fn color_picker_state_default() {
+        let state = State::default();
+
+        assert!(!state.old_show_picker);
+    }
+
+    #[test]
+    fn color_picker_state_reset() {
+        let color = Color::from_rgb(0.5, 0.5, 0.5);
+        let mut state = State::new(color);
+
+        state.reset();
+        // State should still be valid after reset
+        assert!(!state.old_show_picker);
     }
 }

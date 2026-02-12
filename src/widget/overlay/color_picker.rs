@@ -8,12 +8,13 @@ use crate::{
         color::{HexString, Hsv},
         overlay::Position,
     },
-    style::{self, color_picker::Style, style_state::StyleState, Status},
-    ICED_AW_FONT,
+    style::{self, Status, color_picker::Style, style_state::StyleState},
 };
 
 use crate::iced_aw_font::advanced_text::{cancel, ok};
 use iced_core::{
+    Alignment, Border, Clipboard, Color, Element, Event, Layout, Length, Overlay, Padding, Pixels,
+    Point, Rectangle, Renderer as _, Shell, Size, Text, Vector, Widget,
     alignment::{Horizontal, Vertical},
     event, keyboard,
     layout::{Limits, Node},
@@ -22,14 +23,12 @@ use iced_core::{
     text::Renderer as _,
     touch,
     widget::{self, tree::Tree},
-    Alignment, Border, Clipboard, Color, Element, Event, Layout, Length, Overlay, Padding, Pixels,
-    Point, Rectangle, Renderer as _, Shell, Size, Text, Vector, Widget,
 };
 use iced_widget::{
+    Button, Column, Renderer, Row,
     canvas::{self, LineCap, Path, Stroke},
     graphics::geometry::Renderer as _,
     text::{self, Wrapping},
-    Button, Column, Renderer, Row,
 };
 use std::collections::HashMap;
 
@@ -63,6 +62,8 @@ where
     submit_button: Button<'a, Message, Theme, Renderer>,
     /// The function that produces a message when the submit button of the [`ColorPickerOverlay`].
     on_submit: &'a dyn Fn(Color) -> Message,
+    /// Optional function that produces a message when the color changes during selection (real-time updates).
+    on_color_change: Option<&'a dyn Fn(Color) -> Message>,
     /// The position of the [`ColorPickerOverlay`].
     position: Point,
     /// The style of the [`ColorPickerOverlay`].
@@ -86,6 +87,7 @@ where
         state: &'a mut color_picker::State,
         on_cancel: Message,
         on_submit: &'a dyn Fn(Color) -> Message,
+        on_color_change: Option<&'a dyn Fn(Color) -> Message>,
         position: Point,
         class: &'a <Theme as style::color_picker::Catalog>::Class<'b>,
         tree: &'a mut Tree,
@@ -115,6 +117,7 @@ where
             .width(Length::Fill)
             .on_press(on_cancel), // Sending a fake message
             on_submit,
+            on_color_change,
             position,
             class,
             tree,
@@ -139,6 +142,7 @@ where
         event: &Event,
         layout: Layout<'_>,
         cursor: Cursor,
+        shell: &mut Shell<Message>,
     ) -> event::Status {
         let mut hsv_color_children = layout.children();
 
@@ -239,6 +243,10 @@ where
         }
 
         if color_changed {
+            // Call on_color_change callback for real-time updates
+            if let Some(on_color_change) = self.on_color_change {
+                shell.publish(on_color_change(self.state.color));
+            }
             event::Status::Captured
         } else {
             event::Status::Ignored
@@ -252,6 +260,7 @@ where
         event: &Event,
         layout: Layout<'_>,
         cursor: Cursor,
+        shell: &mut Shell<Message>,
     ) -> event::Status {
         let mut rgba_color_children = layout.children();
         let mut color_changed = false;
@@ -408,6 +417,10 @@ where
         }
 
         if color_changed {
+            // Call on_color_change callback for real-time updates
+            if let Some(on_color_change) = self.on_color_change {
+                shell.publish(on_color_change(self.state.color));
+            }
             event::Status::Captured
         } else {
             event::Status::Ignored
@@ -415,7 +428,7 @@ where
     }
 
     /// The even handling for the keyboard input.
-    fn on_event_keyboard(&mut self, event: &Event) -> event::Status {
+    fn on_event_keyboard(&mut self, event: &Event, shell: &mut Shell<Message>) -> event::Status {
         if self.state.focus == Focus::None {
             return event::Status::Ignored;
         }
@@ -531,6 +544,13 @@ where
                     Focus::Alpha => status = rgba_bar_handle(key, &mut self.state.color.a),
                     _ => {}
                 }
+
+                // If color changed via keyboard, call on_color_change callback
+                if status == event::Status::Captured {
+                    if let Some(on_color_change) = self.on_color_change {
+                        shell.publish(on_color_change(self.state.color));
+                    }
+                }
             }
 
             status
@@ -625,7 +645,7 @@ where
         clipboard: &mut dyn Clipboard,
         shell: &mut Shell<Message>,
     ) {
-        if event::Status::Captured == self.on_event_keyboard(event) {
+        if event::Status::Captured == self.on_event_keyboard(event, shell) {
             self.clear_cache();
             shell.capture_event();
             shell.request_redraw();
@@ -637,7 +657,7 @@ where
         let block1_layout = children
             .next()
             .expect("widget: Layout should have a 1. block layout");
-        let hsv_color_status = self.on_event_hsv_color(event, block1_layout, cursor);
+        let hsv_color_status = self.on_event_hsv_color(event, block1_layout, cursor, shell);
         // ----------- Block 1 end ------------------
 
         // ----------- Block 2 ----------------------
@@ -650,7 +670,7 @@ where
         let rgba_color_layout = block2_children
             .next()
             .expect("widget: Layout should have a RGBA color layout");
-        let rgba_color_status = self.on_event_rgba_color(event, rgba_color_layout, cursor);
+        let rgba_color_status = self.on_event_rgba_color(event, rgba_color_layout, cursor, shell);
 
         let mut fake_messages: Vec<Message> = Vec::new();
 
@@ -809,6 +829,49 @@ where
             .max(submit_mouse_interaction)
     }
 
+    fn operate(
+        &mut self,
+        layout: Layout<'_>,
+        renderer: &Renderer,
+        operation: &mut dyn widget::Operation,
+    ) {
+        let mut children = layout.children();
+
+        // Skip block 1 (HSV color area)
+        let _block1_layout = children.next();
+
+        // Block 2 contains the buttons
+        if let Some(block2_layout) = children.next() {
+            let mut block2_children = block2_layout.children();
+
+            // Skip rgba_colors, hex_text
+            let _rgba_layout = block2_children.next();
+            let _hex_text_layout = block2_children.next();
+
+            // Operate on cancel button
+            if let Some(cancel_layout) = block2_children.next() {
+                Widget::operate(
+                    &mut self.cancel_button,
+                    &mut self.tree.children[0],
+                    cancel_layout,
+                    renderer,
+                    operation,
+                );
+            }
+
+            // Operate on submit button
+            if let Some(submit_layout) = block2_children.next() {
+                Widget::operate(
+                    &mut self.submit_button,
+                    &mut self.tree.children[1],
+                    submit_layout,
+                    renderer,
+                    operation,
+                );
+            }
+        }
+    }
+
     fn draw(
         &self,
         renderer: &mut Renderer,
@@ -902,7 +965,7 @@ where
         .height(Length::Fill);
 
     let block1_node = Column::<(), Theme, Renderer>::new()
-        .spacing(PADDING.vertical() / 2.) // Average vertical padding
+        .spacing(PADDING.y() / 2.) // Average vertical padding
         .push(
             Row::new()
                 .width(Length::Fill)
@@ -947,9 +1010,7 @@ where
 
     let mut hex_text_layout = Row::<Message, Theme, Renderer>::new()
         .width(Length::Fill)
-        .height(Length::Fixed(
-            renderer.default_size().0 + PADDING.vertical(),
-        ))
+        .height(Length::Fixed(renderer.default_size().0 + PADDING.y()))
         .layout(color_picker.tree, renderer, &hex_text_limits);
 
     let block2_limits = block2_limits.shrink(Size::new(
@@ -1048,11 +1109,11 @@ where
 
     Node::with_children(
         Size::new(
-            rgba_bounds.width + PADDING.horizontal(),
+            rgba_bounds.width + PADDING.x(),
             rgba_bounds.height
                 + hex_bounds.height
                 + cancel_bounds.height
-                + PADDING.vertical()
+                + PADDING.y()
                 + (2.0 * SPACING.0),
         ),
         vec![rgba_colors, hex_text_layout, cancel_button, submit_button],
@@ -1420,12 +1481,12 @@ fn rgba_color(
                 content: label.to_owned(),
                 bounds: Size::new(label_layout.bounds().width, label_layout.bounds().height),
                 size: renderer.default_size(),
-                font: ICED_AW_FONT,
+                font: renderer.default_font(),
                 align_x: text::Alignment::Center,
                 align_y: Vertical::Center,
                 line_height: text::LineHeight::Relative(1.3),
-                shaping: text::Shaping::Advanced,
-                wrapping: Wrapping::default(),
+                shaping: text::Shaping::Basic,
+                wrapping: Wrapping::None,
             },
             Point::new(
                 label_layout.bounds().center_x(),
@@ -1508,8 +1569,8 @@ fn rgba_color(
                 align_x: text::Alignment::Center,
                 align_y: Vertical::Center,
                 line_height: iced_widget::text::LineHeight::Relative(1.3),
-                shaping: iced_widget::text::Shaping::Advanced,
-                wrapping: Wrapping::default(),
+                shaping: iced_widget::text::Shaping::Basic,
+                wrapping: Wrapping::None,
             },
             Point::new(
                 value_layout.bounds().center_x(),
@@ -1554,7 +1615,7 @@ fn rgba_color(
     f(
         renderer,
         red_row_layout,
-        "R:",
+        "R",
         Color::from_rgb(color.r, 0.0, 0.0),
         color.r,
         cursor,
@@ -1569,7 +1630,7 @@ fn rgba_color(
     f(
         renderer,
         green_row_layout,
-        "G:",
+        "G",
         Color::from_rgb(0.0, color.g, 0.0),
         color.g,
         cursor,
@@ -1584,7 +1645,7 @@ fn rgba_color(
     f(
         renderer,
         blue_row_layout,
-        "B:",
+        "B",
         Color::from_rgb(0.0, 0.0, color.b),
         color.b,
         cursor,
@@ -1599,7 +1660,7 @@ fn rgba_color(
     f(
         renderer,
         alpha_row_layout,
-        "A:",
+        "A",
         Color::from_rgba(0.0, 0.0, 0.0, color.a),
         color.a,
         cursor,
@@ -1816,9 +1877,10 @@ where
 }
 
 /// The state of the currently dragged area.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Default)]
 pub enum ColorBarDragged {
     /// No area is focussed.
+    #[default]
     None,
 
     /// The saturation/value area is focussed.
@@ -1840,16 +1902,11 @@ pub enum ColorBarDragged {
     Alpha,
 }
 
-impl Default for ColorBarDragged {
-    fn default() -> Self {
-        Self::None
-    }
-}
-
 /// An enumeration of all focusable element of the [`ColorPickerOverlay`].
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 pub enum Focus {
     /// Nothing is in focus.
+    #[default]
     None,
 
     /// The overlay itself is in focus.
@@ -1912,11 +1969,5 @@ impl Focus {
             Self::Cancel => Self::Alpha,
             Self::Submit => Self::Cancel,
         }
-    }
-}
-
-impl Default for Focus {
-    fn default() -> Self {
-        Self::None
     }
 }

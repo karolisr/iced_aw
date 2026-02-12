@@ -52,10 +52,10 @@
 //!
 //! ```
 //!
-//! Alterwidgetly you can use the helper macros
+//! Alternatively you can use the helper macros
 //!
 //! ## Example 2
-//! ```
+//! ```ignore
 //! use iced_widget::button;
 //! use iced_aw::menu::{Menu, Item, MenuBar};
 //! use iced_aw::{menu_bar, menu_items};
@@ -94,7 +94,7 @@
 //!
 //! ## Example 3
 //!
-//! ```
+//! ```ignore
 //! use iced_widget::button;
 //! use iced_aw::{menu, Menu};
 //!
@@ -122,7 +122,7 @@
 //!
 //! ## Example 4
 //!
-//! ```
+//! ```ignore
 //! use iced_aw::{menu, Menu};
 //! use iced_widget::button;
 //!
@@ -153,7 +153,7 @@ mod menu_bar;
 mod menu_bar_overlay;
 mod menu_tree;
 
-pub use crate::style::menu_bar::{primary, Catalog, Style};
+pub use crate::style::menu_bar::{Catalog, Style, primary};
 pub use common::{DrawPath, ScrollSpeed};
 pub use menu_bar::MenuBar;
 pub use menu_tree::{Item, Menu};

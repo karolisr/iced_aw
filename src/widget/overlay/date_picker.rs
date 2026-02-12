@@ -9,10 +9,12 @@ use crate::{
         overlay::Position,
     },
     date_picker,
-    style::{date_picker::Style, style_state::StyleState, Status},
+    style::{Status, date_picker::Style, style_state::StyleState},
 };
 use chrono::{Datelike, Local, NaiveDate};
 use iced_core::{
+    Alignment, Border, Clipboard, Color, Element, Event, Layout, Length, Overlay, Padding, Pixels,
+    Point, Rectangle, Renderer as _, Shadow, Shell, Size, Widget,
     alignment::{Horizontal, Vertical},
     event, keyboard,
     layout::{Limits, Node},
@@ -20,13 +22,11 @@ use iced_core::{
     overlay, renderer,
     text::Renderer as _,
     touch,
-    widget::tree::Tree,
-    Alignment, Border, Clipboard, Color, Element, Event, Layout, Length, Overlay, Padding, Pixels,
-    Point, Rectangle, Renderer as _, Shadow, Shell, Size, Widget,
+    widget::{self, tree::Tree},
 };
 use iced_widget::{
-    text::{self, Wrapping},
     Button, Column, Container, Renderer, Row, Text,
+    text::{self, Wrapping},
 };
 use std::collections::HashMap;
 
@@ -570,11 +570,8 @@ where
 
         let mut node = Node::with_children(
             Size::new(
-                col.bounds().width + PADDING.horizontal(),
-                col.bounds().height
-                    + cancel_button.bounds().height
-                    + PADDING.vertical()
-                    + SPACING.0,
+                col.bounds().width + PADDING.x(),
+                col.bounds().height + cancel_button.bounds().height + PADDING.y() + SPACING.0,
             ),
             vec![col, cancel_button, submit_button],
         );
@@ -924,6 +921,151 @@ where
             );
         }
     }
+
+    fn operate(
+        &mut self,
+        layout: Layout<'_>,
+        renderer: &Renderer,
+        operation: &mut dyn widget::Operation,
+    ) {
+        let mut children = layout.children();
+
+        // Get the calendar column layout (contains month/year + days)
+        if let Some(col_layout) = children.next() {
+            // Operate on the calendar column element stored in tree.children[2]
+            // This recursively exposes all text: month, year, arrows, day labels, day numbers
+            if let Some(col_tree) = self.tree.children.get_mut(2) {
+                // Need to recreate the element to call operate on it
+                // This is the same Column structure created in layout()
+                let (left_content, left_font, _left_shaping) = left_open();
+                let (right_content, right_font, _right_shaping) = right_open();
+                let font_size = self.font_size;
+                let date_string = crate::core::date::date_as_string(self.state.date);
+                let (year, month) = date_string.split_once(' ').unwrap_or(("", ""));
+
+                let month_year = Row::<Message, Theme, Renderer>::new()
+                    .width(Length::Shrink)
+                    .spacing(SPACING)
+                    .push(
+                        Row::new()
+                            .width(Length::Shrink)
+                            .spacing(SPACING)
+                            .align_y(Alignment::Center)
+                            .push(
+                                Container::new(
+                                    Text::new(&left_content)
+                                        .size(font_size.0 + 1.0)
+                                        .font(left_font),
+                                )
+                                .height(Length::Shrink)
+                                .width(Length::Shrink),
+                            )
+                            .push(Text::new(month).size(font_size).width(Length::Shrink))
+                            .push(
+                                Container::new(
+                                    Text::new(&right_content)
+                                        .size(font_size.0 + 1.0)
+                                        .font(right_font),
+                                )
+                                .height(Length::Shrink)
+                                .width(Length::Shrink),
+                            ),
+                    )
+                    .push(
+                        Row::new()
+                            .width(Length::Shrink)
+                            .spacing(SPACING)
+                            .align_y(Alignment::Center)
+                            .push(
+                                Container::new(
+                                    Text::new(&left_content)
+                                        .size(font_size.0 + 1.0)
+                                        .font(left_font),
+                                )
+                                .height(Length::Shrink)
+                                .width(Length::Shrink),
+                            )
+                            .push(Text::new(year).size(font_size).width(Length::Shrink))
+                            .push(
+                                Container::new(
+                                    Text::new(&right_content)
+                                        .size(font_size.0 + 1.0)
+                                        .font(right_font),
+                                )
+                                .height(Length::Shrink)
+                                .width(Length::Shrink),
+                            ),
+                    );
+
+                let days =
+                    Container::<Message, Theme, Renderer>::new((0..7).fold(
+                        Column::new().width(Length::Shrink).height(Length::Shrink),
+                        |column, y| {
+                            column.push(
+                                (0..7).fold(
+                                    Row::new()
+                                        .height(Length::Shrink)
+                                        .width(Length::Shrink)
+                                        .spacing(SPACING),
+                                    |row, x| {
+                                        let (day, _) = crate::core::date::position_to_day(
+                                            x,
+                                            y,
+                                            self.state.date.year(),
+                                            self.state.date.month(),
+                                        );
+                                        row.push(
+                                            Container::new(Row::new().push(
+                                                Text::new(format!("{day:02}")).size(font_size),
+                                            ))
+                                            .width(Length::Shrink)
+                                            .height(Length::Shrink)
+                                            .padding(DAY_CELL_PADDING),
+                                        )
+                                    },
+                                ),
+                            )
+                        },
+                    ))
+                    .width(Length::Shrink)
+                    .height(Length::Shrink)
+                    .center_y(Length::Shrink);
+
+                let col = Column::<Message, Theme, Renderer>::new()
+                    .spacing(SPACING)
+                    .align_x(Alignment::Center)
+                    .push(month_year)
+                    .push(days);
+
+                let mut element: Element<Message, Theme, Renderer> = Element::new(col);
+                element
+                    .as_widget_mut()
+                    .operate(col_tree, col_layout, renderer, operation);
+            }
+        }
+
+        // Operate on cancel button
+        if let Some(cancel_layout) = children.next() {
+            Widget::operate(
+                &mut self.cancel_button,
+                &mut self.tree.children[0],
+                cancel_layout,
+                renderer,
+                operation,
+            );
+        }
+
+        // Operate on submit button
+        if let Some(submit_layout) = children.next() {
+            Widget::operate(
+                &mut self.submit_button,
+                &mut self.tree.children[1],
+                submit_layout,
+                renderer,
+                operation,
+            );
+        }
+    }
 }
 
 /// The state of the [`DatePickerOverlay`].
@@ -1063,9 +1205,10 @@ where
 }
 
 /// An enumeration of all focusable elements of the [`DatePickerOverlay`].
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 pub enum Focus {
     /// Nothing is in focus.
+    #[default]
     None,
 
     /// The overlay itself is in focus.
@@ -1113,12 +1256,6 @@ impl Focus {
             Self::Cancel => Self::Day,
             Self::Submit => Self::Cancel,
         }
-    }
-}
-
-impl Default for Focus {
-    fn default() -> Self {
-        Self::None
     }
 }
 
