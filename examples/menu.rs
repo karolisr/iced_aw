@@ -2,14 +2,14 @@
 
 use iced::border::Radius;
 use iced::widget::{
-    button, checkbox, column as col, container, pick_list, row, scrollable, slider, space, text,
-    text_input, toggler, tooltip, vertical_slider, Space,
+    Space, button, checkbox, column as col, container, pick_list, row, scrollable, slider, space,
+    text, text_input, toggler, tooltip, vertical_slider,
 };
-use iced::{alignment, theme, Border, Color, Element, Length, Padding, Size, Theme};
+use iced::{Border, Color, Element, Length, Padding, Size, Theme, alignment, theme};
 
 use iced_aw::menu::{self, Item, Menu};
-use iced_aw::style::{menu_bar::primary, Status};
-use iced_aw::{iced_aw_font, menu_bar, menu_items, ICED_AW_FONT_BYTES};
+use iced_aw::style::{Status, menu_bar::primary};
+use iced_aw::{ICED_AW_FONT_BYTES, iced_aw_font, menu_bar, menu_items};
 use iced_aw::{quad, widgets::InnerBounds};
 
 #[cfg(feature = "debug_log")]
@@ -38,7 +38,6 @@ enum Message {
     TextChange(String),
     ToggleCloseOnClick(bool),
     FruitSelected(Fruit),
-    None,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,9 +73,10 @@ impl Fruit {
         Fruit::Melon,
     ];
 }
-impl ToString for Fruit {
-    fn to_string(&self) -> String {
-        format!("{:?}", self)
+
+impl std::fmt::Display for Fruit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 
@@ -181,7 +181,6 @@ impl App {
                 self.fruit = f;
                 self.title = format!("{:?}", f);
             }
-            Message::None => {}
         }
     }
 
@@ -262,8 +261,9 @@ impl App {
                     .width(Length::Fill)
                     .on_press(Message::Debug("Button".into()))
                 ),
-                (checkbox("Checkbox", self.check).on_toggle(Message::CheckChange)
-                    .width(Length::Fill)
+                (
+                    checkbox(self.check).label("Checkbox").on_toggle(Message::CheckChange)
+                        .width(Length::Fill)
                 ),
                 (
                     row![
@@ -565,7 +565,7 @@ impl App {
                     (debug_button_f("Item")),
                     (
                         tooltip_button(
-                            format!("{:?}", self.fruit), 
+                            format!("{:?}", self.fruit),
                             row![
                                 text("Pick Fruit")
                                     .width(Length::Fill)
@@ -583,7 +583,7 @@ impl App {
                     (debug_button_f("Item")),
                     hold_item_wm(
                         tooltip_button(
-                            "Pick Fruit".to_string(), 
+                            "Pick Fruit".to_string(),
                             row![
                                 text("Pick Fruit")
                                     .width(Length::Fill)
@@ -757,11 +757,11 @@ fn debug_button(
 }
 
 fn debug_button_s(label: &str) -> Element<'_, Message, iced::Theme, iced::Renderer> {
-    debug_button(label, Some(Length::Shrink), Some(Length::Shrink)).into()
+    debug_button(label, Some(Length::Shrink), Some(Length::Shrink))
 }
 
 fn debug_button_f(label: &str) -> Element<'_, Message, iced::Theme, iced::Renderer> {
-    debug_button(label, Some(Length::Fill), Some(Length::Shrink)).into()
+    debug_button(label, Some(Length::Fill), Some(Length::Shrink))
 }
 
 fn submenu_button(label: &str) -> Element<'_, Message, iced::Theme, iced::Renderer> {
@@ -792,7 +792,6 @@ fn color_button<'a>(color: impl Into<Color>) -> Element<'a, Message, iced::Theme
         None,
         Message::ColorChange(color),
     )
-    .into()
 }
 
 fn separator() -> quad::Quad {

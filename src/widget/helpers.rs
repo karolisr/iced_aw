@@ -4,7 +4,7 @@
 #[cfg(feature = "selection_list")]
 use crate::style::{Status, StyleFn};
 #[allow(unused_imports)]
-use iced_core::{self, renderer, Color, Element, Padding};
+use iced_core::{self, Color, Element, Padding, renderer};
 
 #[cfg(feature = "number_input")]
 use num_traits::bounds::Bounded;
@@ -183,6 +183,31 @@ where
     crate::ColorPicker::new(show_picker, color, underlay, on_cancel, on_submit)
 }
 
+#[cfg(feature = "color_picker")]
+/// Shortcut helper to create a [`ColorPicker`] Widget with real-time color change callback.
+///
+/// [`ColorPicker`]: crate::ColorPicker
+pub fn color_picker_with_change<'a, Message, Theme, F, G>(
+    show_picker: bool,
+    color: Color,
+    underlay: impl Into<Element<'a, Message, Theme, iced_widget::Renderer>>,
+    on_cancel: Message,
+    on_submit: F,
+    on_color_change: G,
+) -> crate::ColorPicker<'a, Message, Theme>
+where
+    Message: 'a + Clone,
+    Theme: 'a
+        + crate::style::color_picker::Catalog
+        + iced_widget::button::Catalog
+        + iced_widget::text::Catalog,
+    F: 'static + Fn(Color) -> Message,
+    G: 'static + Fn(Color) -> Message,
+{
+    crate::ColorPicker::new(show_picker, color, underlay, on_cancel, on_submit)
+        .on_color_change(on_color_change)
+}
+
 #[cfg(feature = "date_picker")]
 /// Shortcut helper to create a [`DatePicker`] Widget.
 ///
@@ -323,7 +348,8 @@ where
     Theme: 'a
         + crate::style::selection_list::Catalog
         + iced_widget::container::Catalog
-        + iced_widget::scrollable::Catalog,
+        + iced_widget::scrollable::Catalog
+        + iced_widget::text::Catalog,
     T: Clone + Display + Eq + Hash,
     [T]: ToOwned<Owned = Vec<T>>,
     <Theme as crate::style::selection_list::Catalog>::Class<'a>:
@@ -355,7 +381,8 @@ where
     Theme: 'a
         + crate::style::selection_list::Catalog
         + iced_widget::container::Catalog
-        + iced_widget::scrollable::Catalog,
+        + iced_widget::scrollable::Catalog
+        + iced_widget::text::Catalog,
     T: Clone + Display + Eq + Hash,
     [T]: ToOwned<Owned = Vec<T>>,
 {

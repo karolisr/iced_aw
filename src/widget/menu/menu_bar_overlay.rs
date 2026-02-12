@@ -7,15 +7,16 @@
 #![allow(clippy::similar_names)]
 
 use iced_core::{
+    Clipboard, Event, Layout, Point, Rectangle, Shell, Size, Vector,
     layout::{Limits, Node},
     mouse, overlay, renderer,
     time::Instant,
     widget::{Operation, Tree},
-    window, Clipboard, Event, Layout, Point, Rectangle, Shell, Size, Vector,
+    window,
 };
 
 use super::{common::*, menu_bar::*, menu_tree::*};
-use crate::style::{menu_bar::*, Status};
+use crate::style::{Status, menu_bar::*};
 
 #[cfg(feature = "debug_log")]
 use log::{debug, trace, warn};
@@ -258,7 +259,6 @@ where
             viewport: &Rectangle,
             prev_bounds_list: &mut Vec<Rectangle>,
             prev_active: &mut Index,
-            depth: usize,
         ) -> RecEvent {
             #[cfg(feature = "debug_log")]
             debug!(target:"menu::MenuBarOverlay::update", "rec");
@@ -288,12 +288,10 @@ where
                 let next_parent_bounds = slice_layout
                     .children()
                     .nth(active_in_slice)
-                    .unwrap_or_else(|| panic!("Index {:?} (in slice space) is not within the slice layout \
-                        | slice_layout.children().count(): {:?} \
-                        | This should not happen, please report this issue
-                        ", 
-                        active_in_slice,
-                        slice_layout.children().count()))
+                    .expect(
+                        "Index (in slice space) is not within the slice layout. \
+                        This should not happen, please report this issue"
+                    )
                     .bounds();
 
                 rec(
@@ -311,7 +309,6 @@ where
                     viewport,
                     prev_bounds_list,
                     &mut menu_state.active,
-                    depth + 1,
                 )
             } else if cursor == mouse::Cursor::Unavailable{
                 #[cfg(feature = "debug_log")]
@@ -326,12 +323,11 @@ where
             #[cfg(feature = "debug_log")]
             {
                 debug!(target:"menu::MenuBarOverlay::update", "");
-                debug!(target:"menu::MenuBarOverlay::update", "depth: {:?}", depth);
                 debug!(target:"menu::MenuBarOverlay::update", "menu_state.active: {:?}", menu_state.active);
                 debug!(target:"menu::MenuBarOverlay::update", "menu_state.slice: {:?}", menu_state.slice);
-                debug!(target:"menu::MenuBarOverlay::update", "rec_event: {:?}", rec_event);
-                debug!(target:"menu::MenuBarOverlay::update", "event: {:?}", event);
-                debug!(target:"menu::MenuBarOverlay::update", "cursor: {:?}", cursor);
+                debug!(target:"menu::MenuBarOverlay::update", "rec_event: {rec_event:?}");
+                debug!(target:"menu::MenuBarOverlay::update", "event: {event:?}");
+                debug!(target:"menu::MenuBarOverlay::update", "cursor: {cursor:?}");
                 debug!(target:"menu::MenuBarOverlay::update", "cursor is over background bounds: {:?}", cursor.is_over(background_bounds));
                 debug!(target:"menu::MenuBarOverlay::update", "shell.is_event_captured(): {:?}", shell.is_event_captured());
             }
@@ -369,11 +365,10 @@ where
             &viewport,
             &mut prev_bounds_list,
             &mut bar_menu_state.active,
-            0,
         );
 
         #[cfg(feature = "debug_log")]
-        debug!(target:"menu::MenuBarOverlay::update", "re: {:?}", re);
+        debug!(target:"menu::MenuBarOverlay::update", "re: {re:?}");
 
         if matches!(
             event,
@@ -763,7 +758,7 @@ where
         let mut overlays = vec![];
         let mut next = None;
 
-        let slice_layout = self.layout.children().next().unwrap();
+        let slice_layout = self.layout.children().next()?;
 
         for (i, ((item, item_tree), item_layout)) in itl_iter_slice_enum!(
             slice,
@@ -783,8 +778,10 @@ where
                 continue;
             };
 
-            if i == active {
-                next = Some((item_menu.as_mut().unwrap(), item_menu_tree));
+            if i == active
+                && let Some(menu) = item_menu.as_mut()
+            {
+                next = Some((menu, item_menu_tree));
             }
             if let Some(overlay) = item_widget.as_widget_mut().overlay(
                 item_widget_tree,

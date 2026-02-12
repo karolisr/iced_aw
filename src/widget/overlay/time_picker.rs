@@ -5,20 +5,22 @@
 use crate::iced_aw_font::advanced_text::{cancel, down_open, ok, up_open};
 use crate::{
     core::clock::{
-        NearestRadius, HOUR_RADIUS_PERCENTAGE, HOUR_RADIUS_PERCENTAGE_NO_SECONDS,
-        MINUTE_RADIUS_PERCENTAGE, MINUTE_RADIUS_PERCENTAGE_NO_SECONDS, PERIOD_PERCENTAGE,
+        HOUR_RADIUS_PERCENTAGE, HOUR_RADIUS_PERCENTAGE_NO_SECONDS, MINUTE_RADIUS_PERCENTAGE,
+        MINUTE_RADIUS_PERCENTAGE_NO_SECONDS, NearestRadius, PERIOD_PERCENTAGE,
         SECOND_RADIUS_PERCENTAGE,
     },
     core::{clock, overlay::Position, time::Period},
     style::{
+        Status,
         style_state::StyleState,
         time_picker::{Catalog, Style},
-        Status,
     },
     time_picker::{self, Time},
 };
 use chrono::{Duration, Local, NaiveTime, Timelike};
 use iced_core::{
+    Alignment, Border, Clipboard, Color, Element, Event, Layout, Length, Overlay, Padding, Pixels,
+    Point, Rectangle, Renderer as _, Shell, Size, Text, Vector, Widget,
     alignment::{Horizontal, Vertical},
     event, keyboard,
     layout::{Limits, Node},
@@ -26,17 +28,14 @@ use iced_core::{
     overlay, renderer,
     text::Renderer as _,
     touch,
-    widget::tree::Tree,
-    Alignment, Border, Clipboard, Color, Element, Event, Layout, Length, Overlay, Padding, Pixels,
-    Point, Rectangle, Renderer as _, Shell, Size, Text, Vector, Widget,
+    widget::{self, tree::Tree},
 };
 use iced_widget::{
-    button,
+    Button, Column, Container, Renderer, Row, button,
     canvas::{self, LineCap, Path, Stroke, Text as CanvasText},
     container,
     graphics::geometry::Renderer as _,
     text::{self, Wrapping},
-    Button, Column, Container, Renderer, Row,
 };
 use std::collections::HashMap;
 
@@ -190,11 +189,7 @@ where
                     NearestRadius::Period => {
                         let (pm, hour) = self.state.time.hour12();
                         let hour = if hour == 12 {
-                            if pm {
-                                12
-                            } else {
-                                0
-                            }
+                            if pm { 12 } else { 0 }
                         } else {
                             hour
                         };
@@ -579,11 +574,11 @@ where
 
         let mut node = Node::with_children(
             Size::new(
-                clock.bounds().width + (PADDING.left + PADDING.right),
+                clock.bounds().width + PADDING.x(),
                 clock.bounds().height
                     + digital_clock.bounds().height
                     + cancel_button.bounds().height
-                    + (PADDING.top + PADDING.bottom)
+                    + PADDING.y()
                     + 2.0 * SPACING.0,
             ),
             vec![clock, digital_clock, cancel_button, submit_button],
@@ -944,6 +939,172 @@ where
                     ..renderer::Quad::default()
                 },
                 Color::TRANSPARENT,
+            );
+        }
+    }
+
+    fn operate(
+        &mut self,
+        layout: Layout<'_>,
+        renderer: &Renderer,
+        operation: &mut dyn widget::Operation,
+    ) {
+        let mut children = layout.children();
+
+        // Skip the clock canvas (analog display) - it has no text to expose
+        let _clock_layout = children.next();
+
+        // Get the digital clock layout (contains hour, minute, second text)
+        if let Some(digital_clock_layout) = children.next() {
+            // Operate on the digital clock element stored in tree.children[2]
+            // This recursively exposes all text elements: hour, minute, second, separators, period
+            if let Some(digital_clock_tree) = self.tree.children.get_mut(2) {
+                // Need to recreate the digital clock element to call operate on it
+                // This is the same structure created in the digital_clock() function
+                let arrow_size = renderer.default_size().0;
+                let font_size = 1.2 * renderer.default_size().0;
+
+                let (up_content, up_font, _up_shaping) = up_open();
+                let (down_content, down_font, _down_shaping) = down_open();
+
+                let mut digital_clock_row = Row::<Message, Theme, Renderer>::new()
+                    .align_y(Alignment::Center)
+                    .height(Length::Shrink)
+                    .width(Length::Shrink)
+                    .spacing(1);
+
+                if !self.state.use_24h {
+                    let period_text = if self.state.time.hour12().0 {
+                        "PM"
+                    } else {
+                        "AM"
+                    };
+                    digital_clock_row = digital_clock_row.push(
+                        Column::new()
+                            .height(Length::Shrink)
+                            .push(text::Text::new(period_text).size(font_size)),
+                    );
+                }
+
+                digital_clock_row = digital_clock_row
+                    .push(
+                        // Hour column
+                        Column::new()
+                            .align_x(Alignment::Center)
+                            .height(Length::Shrink)
+                            .push(text::Text::new(&up_content).font(up_font).size(arrow_size))
+                            .push(
+                                text::Text::new(format!(
+                                    "{:02}",
+                                    if self.state.use_24h {
+                                        self.state.time.hour()
+                                    } else {
+                                        self.state.time.hour12().1
+                                    }
+                                ))
+                                .size(font_size),
+                            )
+                            .push(
+                                text::Text::new(&down_content)
+                                    .font(down_font)
+                                    .size(arrow_size),
+                            ),
+                    )
+                    .push(
+                        Column::new()
+                            .height(Length::Shrink)
+                            .push(text::Text::new(":").size(font_size)),
+                    )
+                    .push(
+                        // Minute column
+                        Column::new()
+                            .align_x(Alignment::Center)
+                            .height(Length::Shrink)
+                            .push(text::Text::new(&up_content).font(up_font).size(arrow_size))
+                            .push(
+                                text::Text::new(format!("{:02}", self.state.time.minute()))
+                                    .size(font_size),
+                            )
+                            .push(
+                                text::Text::new(&down_content)
+                                    .font(down_font)
+                                    .size(arrow_size),
+                            ),
+                    );
+
+                if self.state.show_seconds {
+                    digital_clock_row = digital_clock_row
+                        .push(
+                            Column::new()
+                                .height(Length::Shrink)
+                                .push(text::Text::new(":").size(font_size)),
+                        )
+                        .push(
+                            // Second column
+                            Column::new()
+                                .align_x(Alignment::Center)
+                                .height(Length::Shrink)
+                                .push(text::Text::new(&up_content).font(up_font).size(arrow_size))
+                                .push(
+                                    text::Text::new(format!("{:02}", self.state.time.second()))
+                                        .size(font_size),
+                                )
+                                .push(
+                                    text::Text::new(&down_content)
+                                        .font(down_font)
+                                        .size(arrow_size),
+                                ),
+                        );
+                }
+
+                if !self.state.use_24h {
+                    let period_text = if self.state.time.hour12().0 {
+                        "PM"
+                    } else {
+                        "AM"
+                    };
+                    digital_clock_row = digital_clock_row.push(
+                        Column::new()
+                            .height(Length::Shrink)
+                            .push(text::Text::new(period_text).size(font_size)),
+                    );
+                }
+
+                let container = Container::new(digital_clock_row)
+                    .width(Length::Fill)
+                    .height(Length::Shrink)
+                    .center_x(Length::Fill)
+                    .center_y(Length::Shrink);
+
+                let mut element: Element<Message, Theme, Renderer> = Element::new(container);
+                element.as_widget_mut().operate(
+                    digital_clock_tree,
+                    digital_clock_layout,
+                    renderer,
+                    operation,
+                );
+            }
+        }
+
+        // Operate on cancel button
+        if let Some(cancel_layout) = children.next() {
+            Widget::operate(
+                &mut self.cancel_button,
+                &mut self.tree.children[0],
+                cancel_layout,
+                renderer,
+                operation,
+            );
+        }
+
+        // Operate on submit button
+        if let Some(submit_layout) = children.next() {
+            Widget::operate(
+                &mut self.submit_button,
+                &mut self.tree.children[1],
+                submit_layout,
+                renderer,
+                operation,
             );
         }
     }
@@ -1806,7 +1967,7 @@ where
 }
 
 /// The state of the currently dragged watch hand.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ClockDragged {
     /// Nothing is dragged.
     None,
@@ -1822,9 +1983,10 @@ pub enum ClockDragged {
 }
 
 /// An enumeration of all focusable elements of the [`TimePickerOverlay`].
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
 pub enum Focus {
     /// Nothing is in focus.
+    #[default]
     None,
 
     /// The overlay itself is in focus.
@@ -1887,8 +2049,324 @@ impl Focus {
     }
 }
 
-impl Default for Focus {
-    fn default() -> Self {
-        Self::None
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn state_new_creates_state_with_time() {
+        let time = Time::Hm {
+            hour: 14,
+            minute: 30,
+            period: Period::H24,
+        };
+        let state = State::new(time, true, false);
+
+        assert_eq!(state.time.hour(), 14);
+        assert_eq!(state.time.minute(), 30);
+        assert!(state.use_24h);
+        assert!(!state.show_seconds);
+        assert_eq!(state.focus, Focus::None);
+        assert_eq!(state.clock_dragged, ClockDragged::None);
+    }
+
+    #[test]
+    fn state_new_with_seconds() {
+        let time = Time::Hms {
+            hour: 14,
+            minute: 30,
+            second: 45,
+            period: Period::H24,
+        };
+        let state = State::new(time, true, true);
+
+        assert_eq!(state.time.hour(), 14);
+        assert_eq!(state.time.minute(), 30);
+        assert_eq!(state.time.second(), 45);
+        assert!(state.show_seconds);
+    }
+
+    #[test]
+    fn state_default_creates_state() {
+        let state = State::default();
+
+        assert!(state.time.hour() < 24);
+        assert!(state.time.minute() < 60);
+        assert!(!state.use_24h);
+        assert!(!state.show_seconds);
+        assert_eq!(state.focus, Focus::None);
+    }
+
+    #[test]
+    fn clock_dragged_enum_variants() {
+        let none = ClockDragged::None;
+        let hour = ClockDragged::Hour;
+        let minute = ClockDragged::Minute;
+        let second = ClockDragged::Second;
+
+        // Just verify the enum can be created and compared
+        assert!(matches!(none, ClockDragged::None));
+        assert!(matches!(hour, ClockDragged::Hour));
+        assert!(matches!(minute, ClockDragged::Minute));
+        assert!(matches!(second, ClockDragged::Second));
+    }
+
+    #[test]
+    fn focus_default_is_none() {
+        let focus = Focus::default();
+        assert_eq!(focus, Focus::None);
+    }
+
+    #[test]
+    fn focus_next_without_seconds() {
+        let show_seconds = false;
+
+        assert_eq!(Focus::None.next(show_seconds), Focus::Overlay);
+        assert_eq!(Focus::Overlay.next(show_seconds), Focus::DigitalHour);
+        assert_eq!(Focus::DigitalHour.next(show_seconds), Focus::DigitalMinute);
+        assert_eq!(Focus::DigitalMinute.next(show_seconds), Focus::Cancel);
+        assert_eq!(Focus::Cancel.next(show_seconds), Focus::Submit);
+        assert_eq!(Focus::Submit.next(show_seconds), Focus::Overlay);
+    }
+
+    #[test]
+    fn focus_next_with_seconds() {
+        let show_seconds = true;
+
+        assert_eq!(Focus::None.next(show_seconds), Focus::Overlay);
+        assert_eq!(Focus::Overlay.next(show_seconds), Focus::DigitalHour);
+        assert_eq!(Focus::DigitalHour.next(show_seconds), Focus::DigitalMinute);
+        assert_eq!(
+            Focus::DigitalMinute.next(show_seconds),
+            Focus::DigitalSecond
+        );
+        assert_eq!(Focus::DigitalSecond.next(show_seconds), Focus::Cancel);
+        assert_eq!(Focus::Cancel.next(show_seconds), Focus::Submit);
+        assert_eq!(Focus::Submit.next(show_seconds), Focus::Overlay);
+    }
+
+    #[test]
+    fn focus_previous_without_seconds() {
+        let show_seconds = false;
+
+        assert_eq!(Focus::None.previous(show_seconds), Focus::None);
+        assert_eq!(Focus::Overlay.previous(show_seconds), Focus::Submit);
+        assert_eq!(Focus::DigitalHour.previous(show_seconds), Focus::Overlay);
+        assert_eq!(
+            Focus::DigitalMinute.previous(show_seconds),
+            Focus::DigitalHour
+        );
+        assert_eq!(Focus::Cancel.previous(show_seconds), Focus::DigitalMinute);
+        assert_eq!(Focus::Submit.previous(show_seconds), Focus::Cancel);
+    }
+
+    #[test]
+    fn focus_previous_with_seconds() {
+        let show_seconds = true;
+
+        assert_eq!(Focus::None.previous(show_seconds), Focus::None);
+        assert_eq!(Focus::Overlay.previous(show_seconds), Focus::Submit);
+        assert_eq!(Focus::DigitalHour.previous(show_seconds), Focus::Overlay);
+        assert_eq!(
+            Focus::DigitalMinute.previous(show_seconds),
+            Focus::DigitalHour
+        );
+        assert_eq!(
+            Focus::DigitalSecond.previous(show_seconds),
+            Focus::DigitalMinute
+        );
+        assert_eq!(Focus::Cancel.previous(show_seconds), Focus::DigitalSecond);
+        assert_eq!(Focus::Submit.previous(show_seconds), Focus::Cancel);
+    }
+
+    #[test]
+    fn focus_navigation_cycle_without_seconds() {
+        let show_seconds = false;
+        let mut focus = Focus::Overlay;
+
+        // Navigate forward through all elements
+        focus = focus.next(show_seconds); // DigitalHour
+        focus = focus.next(show_seconds); // DigitalMinute
+        focus = focus.next(show_seconds); // Cancel
+        focus = focus.next(show_seconds); // Submit
+        focus = focus.next(show_seconds); // Back to Overlay
+
+        assert_eq!(focus, Focus::Overlay);
+
+        // Navigate backward through all elements
+        focus = focus.previous(show_seconds); // Submit
+        focus = focus.previous(show_seconds); // Cancel
+        focus = focus.previous(show_seconds); // DigitalMinute
+        focus = focus.previous(show_seconds); // DigitalHour
+        focus = focus.previous(show_seconds); // Back to Overlay
+
+        assert_eq!(focus, Focus::Overlay);
+    }
+
+    #[test]
+    fn focus_navigation_cycle_with_seconds() {
+        let show_seconds = true;
+        let mut focus = Focus::Overlay;
+
+        // Navigate forward through all elements
+        focus = focus.next(show_seconds); // DigitalHour
+        focus = focus.next(show_seconds); // DigitalMinute
+        focus = focus.next(show_seconds); // DigitalSecond
+        focus = focus.next(show_seconds); // Cancel
+        focus = focus.next(show_seconds); // Submit
+        focus = focus.next(show_seconds); // Back to Overlay
+
+        assert_eq!(focus, Focus::Overlay);
+
+        // Navigate backward through all elements
+        focus = focus.previous(show_seconds); // Submit
+        focus = focus.previous(show_seconds); // Cancel
+        focus = focus.previous(show_seconds); // DigitalSecond
+        focus = focus.previous(show_seconds); // DigitalMinute
+        focus = focus.previous(show_seconds); // DigitalHour
+        focus = focus.previous(show_seconds); // Back to Overlay
+
+        assert_eq!(focus, Focus::Overlay);
+    }
+
+    #[test]
+    fn focus_skips_seconds_when_not_shown() {
+        let show_seconds = false;
+
+        // When going forward from DigitalMinute, skip DigitalSecond
+        assert_eq!(Focus::DigitalMinute.next(show_seconds), Focus::Cancel);
+
+        // When going backward from Cancel, skip DigitalSecond
+        assert_eq!(Focus::Cancel.previous(show_seconds), Focus::DigitalMinute);
+    }
+
+    #[test]
+    fn focus_includes_seconds_when_shown() {
+        let show_seconds = true;
+
+        // When going forward from DigitalMinute, include DigitalSecond
+        assert_eq!(
+            Focus::DigitalMinute.next(show_seconds),
+            Focus::DigitalSecond
+        );
+
+        // When going backward from Cancel, include DigitalSecond
+        assert_eq!(Focus::Cancel.previous(show_seconds), Focus::DigitalSecond);
+    }
+
+    #[test]
+    fn state_with_different_times() {
+        let test_times = [
+            (0, 0, 0),    // Midnight
+            (6, 30, 0),   // Morning
+            (12, 0, 0),   // Noon
+            (18, 45, 30), // Evening with seconds
+            (23, 59, 59), // End of day with seconds
+        ];
+
+        for (hour, minute, second) in test_times {
+            let time = if second > 0 {
+                Time::Hms {
+                    hour,
+                    minute,
+                    second,
+                    period: Period::H24,
+                }
+            } else {
+                Time::Hm {
+                    hour,
+                    minute,
+                    period: Period::H24,
+                }
+            };
+
+            let state = State::new(time, true, second > 0);
+
+            assert_eq!(state.time.hour(), hour);
+            assert_eq!(state.time.minute(), minute);
+            if second > 0 {
+                assert_eq!(state.time.second(), second);
+            }
+        }
+    }
+
+    #[test]
+    fn state_12h_format() {
+        let time = Time::Hm {
+            hour: 2,
+            minute: 30,
+            period: Period::Pm,
+        };
+        let state = State::new(time, false, false);
+
+        assert_eq!(state.time.hour(), 14); // 2 PM = 14:00 in 24h
+        assert!(!state.use_24h);
+    }
+
+    #[test]
+    fn overlay_buttons_has_two_children() {
+        let buttons: TimePickerOverlayButtons<(), iced_widget::Theme> =
+            TimePickerOverlayButtons::default();
+
+        let children = Widget::<(), iced_widget::Theme, Renderer>::children(&buttons);
+        assert_eq!(children.len(), 2);
+    }
+
+    #[test]
+    fn clock_dragged_is_copy() {
+        let dragged = ClockDragged::Hour;
+        let copied = dragged;
+
+        // Verify both can be used (Copy trait)
+        assert!(matches!(dragged, ClockDragged::Hour));
+        assert!(matches!(copied, ClockDragged::Hour));
+    }
+
+    #[test]
+    fn focus_is_copy_and_eq() {
+        let focus = Focus::DigitalHour;
+        let copied = focus;
+
+        // Verify both can be used (Copy trait)
+        assert_eq!(focus, Focus::DigitalHour);
+        assert_eq!(copied, Focus::DigitalHour);
+
+        // Verify equality (Eq trait)
+        assert_eq!(focus, copied);
+    }
+
+    #[test]
+    fn focus_none_stays_none_on_previous() {
+        // Focus::None should stay None when calling previous
+        assert_eq!(Focus::None.previous(false), Focus::None);
+        assert_eq!(Focus::None.previous(true), Focus::None);
+    }
+
+    #[test]
+    fn focus_all_variants_covered() {
+        // Test that all Focus variants can be created
+        let variants = [
+            Focus::None,
+            Focus::Overlay,
+            Focus::DigitalHour,
+            Focus::DigitalMinute,
+            Focus::DigitalSecond,
+            Focus::Cancel,
+            Focus::Submit,
+        ];
+
+        for variant in variants {
+            // Just verify they exist and can be compared
+            assert!(matches!(
+                variant,
+                Focus::None
+                    | Focus::Overlay
+                    | Focus::DigitalHour
+                    | Focus::DigitalMinute
+                    | Focus::DigitalSecond
+                    | Focus::Cancel
+                    | Focus::Submit
+            ));
+        }
     }
 }

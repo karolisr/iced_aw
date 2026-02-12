@@ -1,8 +1,8 @@
 use iced_core::{
+    Padding, Rectangle, Shell, Size,
     layout::{Layout, Node},
     mouse, renderer,
     widget::Tree,
-    Padding, Rectangle, Shell, Size,
 };
 
 use super::menu_bar::{GlobalState, MenuBarTask};
@@ -102,8 +102,8 @@ pub fn pad_rectangle(rect: Rectangle, padding: Padding) -> Rectangle {
     Rectangle {
         x: rect.x - padding.left,
         y: rect.y - padding.top,
-        width: rect.width + (padding.left + padding.right),
-        height: rect.height + (padding.top + padding.bottom),
+        width: rect.width + padding.x(),
+        height: rect.height + padding.y(),
     }
 }
 
@@ -162,7 +162,7 @@ pub(super) fn search_bound(
     let mut right = default_right;
 
     while left != right {
-        let m = ((left + right) / 2) + 1;
+        let m = usize::midpoint(left, right) + 1;
         if get_position(&list[m]) > bound {
             right = m - 1;
         } else {
@@ -241,6 +241,7 @@ pub(super) fn try_open_menu<'a, 'b, Message, Theme: Catalog, Renderer: renderer:
 ///
 /// This function assumes that a mouse::Event::ButtonPressed(mouse::Button::Left) event has occurred,
 /// make sure to check the event before calling this function.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn schedule_close_on_click<
     'a,
     'b,
@@ -254,8 +255,8 @@ pub(super) fn schedule_close_on_click<
     items: &mut [Item<'a, Message, Theme, Renderer>],
     slice_layout: impl Iterator<Item = Layout<'b>>,
     cursor: mouse::Cursor,
-    menu_coic: Option<bool>,
-    menu_cobc: Option<bool>,
+    menu_close_on_item_click: Option<bool>,
+    menu_close_on_background_click: Option<bool>,
 ) {
     global_state.clear_task();
 
@@ -272,7 +273,10 @@ pub(super) fn schedule_close_on_click<
                     global_state.schedule(MenuBarTask::CloseOnClick);
                 }
             }
-            for cocfb in [menu_coic, Some(global_parameters.close_on_item_click)] {
+            for cocfb in [
+                menu_close_on_item_click,
+                Some(global_parameters.close_on_item_click),
+            ] {
                 if let (false, Some(coc)) = (coc_handled, cocfb) {
                     coc_handled = true;
                     if coc {
@@ -284,7 +288,10 @@ pub(super) fn schedule_close_on_click<
         }
     }
 
-    for cocfb in [menu_cobc, Some(global_parameters.close_on_background_click)] {
+    for cocfb in [
+        menu_close_on_background_click,
+        Some(global_parameters.close_on_background_click),
+    ] {
         if let (false, Some(coc)) = (coc_handled, cocfb) {
             coc_handled = true;
             if coc {

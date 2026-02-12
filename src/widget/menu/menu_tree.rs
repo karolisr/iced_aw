@@ -13,14 +13,14 @@
 use super::common::*;
 use super::flex;
 use iced_core::{
+    Clipboard, Element, Event, Length, Padding, Pixels, Point, Rectangle, Shell, Size, Vector,
     alignment,
     layout::{Layout, Limits, Node},
     mouse, renderer,
     time::Instant,
-    widget::tree::{self, Tree},
     widget::Operation,
-    window, Clipboard, Element, Event, Length, Padding, Pixels, Point, Rectangle, Shell, Size,
-    Vector,
+    widget::tree::{self, Tree},
+    window,
 };
 use std::iter::once;
 
@@ -436,12 +436,10 @@ where
                                 let center = slice_layout
                                     .children()
                                     .nth(active_in_slice)
-                                    .unwrap_or_else(|| panic!(" Index {:?} (in slice space) is not within the slice layout \
-                                        | slice_layout.children().count(): {:?} \
-                                        | This should not happen, please report this issue
-                                        ",
-                                        active_in_slice,
-                                        slice_layout.children().count()))
+                                    .expect(
+                                        "Index (in slice space) is not within the slice layout. \
+                                        This should not happen, please report this issue",
+                                    )
                                     .bounds()
                                     .center();
                                 mouse::Cursor::Available(center)
@@ -705,16 +703,10 @@ where
             let active_bounds = slice_layout
                 .children()
                 .nth(active_in_slice)
-                .unwrap_or_else(|| {
-                    panic!(
-                        "Index {:?} (in slice space) is not within the slice layout \
-                    | slice_layout.children().count(): {:?} \
-                    | This should not happen, please report this issue
-                    ",
-                        active_in_slice,
-                        slice_layout.children().count()
-                    )
-                })
+                .expect(
+                    "Index (in slice space) is not within the slice layout. \
+                    This should not happen, please report this issue",
+                )
                 .bounds();
 
             renderer.fill_quad(

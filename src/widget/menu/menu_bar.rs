@@ -6,12 +6,12 @@
 #![allow(clippy::enum_glob_use)]
 
 use iced_core::{
+    Clipboard, Element, Event, Layout, Length, Padding, Pixels, Rectangle, Shell, Size, Widget,
     alignment, event,
     layout::{Limits, Node},
     mouse, overlay, renderer,
-    widget::{tree, Operation, Tree},
-    window, Clipboard, Element, Event, Layout, Length, Padding, Pixels, Rectangle, Shell, Size,
-    Widget,
+    widget::{Operation, Tree, tree},
+    window,
 };
 
 use super::{common::*, flex, menu_bar_overlay::MenuBarOverlay, menu_tree::*};
@@ -308,10 +308,7 @@ where
 
         let items_node_bounds = items_node.bounds();
         #[cfg(feature = "debug_log")]
-        debug!(
-            "menu::MenuBar::layout | items_node_bounds: {:?}",
-            items_node_bounds
-        );
+        debug!("menu::MenuBar::layout | items_node_bounds: {items_node_bounds:?}");
 
         let resolved_width = match self.width {
             Length::Fill | Length::FillPortion(_) => items_node_bounds
@@ -323,14 +320,14 @@ where
         };
 
         let lower_bound_rel = self.padding.left - bar_menu_state.scroll_offset;
-        let upper_bound_rel = lower_bound_rel + resolved_width - (self.padding.left + self.padding.right);
+        let upper_bound_rel = lower_bound_rel + resolved_width - self.padding.x();
 
         let slice =
             MenuSlice::from_bounds_rel(lower_bound_rel, upper_bound_rel, &items_node, |n| {
                 n.bounds().x
             });
         #[cfg(feature = "debug_log")]
-        debug!("menu::MenuBar::layout | slice: {:?}", slice);
+        debug!("menu::MenuBar::layout | slice: {slice:?}");
 
         bar_menu_state.slice = slice;
 
@@ -522,7 +519,7 @@ where
         }
 
         #[cfg(feature = "debug_log")]
-        debug!(target:"menu::MenuBar::update", "return | bar: {:?}", bar);
+        debug!(target:"menu::MenuBar::update", "return | bar: {bar:?}");
     }
 
     fn operate(
@@ -610,16 +607,10 @@ where
             let active_bounds = slice_layout
                 .children()
                 .nth(active_in_slice)
-                .unwrap_or_else(|| {
-                    panic!(
-                        "Index {:?} (in slice space) is not within the menu bar layout \
-                    | slice_layout.children().count(): {:?} \
-                    | This should not happen, please report this issue
-                    ",
-                        active_in_slice,
-                        slice_layout.children().count()
-                    )
-                })
+                .expect(
+                    "Index (in slice space) is not within the menu bar layout. \
+                    This should not happen, please report this issue",
+                )
                 .bounds();
 
             renderer.fill_quad(
@@ -636,8 +627,8 @@ where
             Rectangle {
                 x: layout.bounds().x + self.padding.left,
                 y: layout.bounds().y + self.padding.top,
-                width: layout.bounds().width - (self.padding.left + self.padding.right),
-                height: layout.bounds().height - (self.padding.top + self.padding.bottom),
+                width: layout.bounds().width - self.padding.x(),
+                height: layout.bounds().height - self.padding.y(),
             },
             |r| {
                 itl_iter_slice!(slice, self.roots;iter, tree.children;iter, slice_layout.children())
@@ -675,7 +666,7 @@ where
         } else {
             #[cfg(feature = "debug_log")]
             debug!(target:"menu::MenuBar::overlay", "state not open | try return root overlays");
-            let slice_layout = layout.children().next().unwrap();
+            let slice_layout = layout.children().next()?;
 
             let Tree {
                 state,
@@ -723,5 +714,175 @@ where
 {
     fn from(value: MenuBar<'a, Message, Theme, Renderer>) -> Self {
         Self::new(value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use iced_widget::text::Text;
+
+    #[derive(Clone, Debug)]
+    #[allow(dead_code)]
+    enum TestMessage {
+        Action1,
+        Action2,
+    }
+
+    type TestMenuBar<'a> = MenuBar<'a, TestMessage, iced_widget::Theme, iced_widget::Renderer>;
+
+    #[test]
+    fn menu_bar_new_creates_instance() {
+        let items = vec![Item::new(Text::new("File")), Item::new(Text::new("Edit"))];
+
+        let menu_bar = TestMenuBar::new(items);
+        assert_eq!(menu_bar.roots.len(), 2);
+        assert_eq!(menu_bar.spacing, Pixels::ZERO);
+        assert_eq!(menu_bar.width, Length::Shrink);
+        assert_eq!(menu_bar.height, Length::Shrink);
+    }
+
+    #[test]
+    fn menu_bar_width_sets_value() {
+        let items = vec![Item::new(Text::new("File"))];
+        let menu_bar = TestMenuBar::new(items).width(Length::Fill);
+        assert_eq!(menu_bar.width, Length::Fill);
+    }
+
+    #[test]
+    fn menu_bar_height_sets_value() {
+        let items = vec![Item::new(Text::new("File"))];
+        let menu_bar = TestMenuBar::new(items).height(Length::Fixed(50.0));
+        assert_eq!(menu_bar.height, Length::Fixed(50.0));
+    }
+
+    #[test]
+    fn menu_bar_spacing_sets_value() {
+        let items = vec![Item::new(Text::new("File"))];
+        let menu_bar = TestMenuBar::new(items).spacing(Pixels(10.0));
+        assert_eq!(menu_bar.spacing, Pixels(10.0));
+    }
+
+    #[test]
+    fn menu_bar_padding_sets_value() {
+        let items = vec![Item::new(Text::new("File"))];
+        let menu_bar = TestMenuBar::new(items).padding(Padding::new(5.0));
+        assert_eq!(menu_bar.padding, Padding::new(5.0));
+    }
+
+    #[test]
+    fn menu_bar_safe_bounds_margin_sets_value() {
+        let items = vec![Item::new(Text::new("File"))];
+        let menu_bar = TestMenuBar::new(items).safe_bounds_margin(100.0);
+        #[allow(clippy::float_cmp)]
+        {
+            assert_eq!(menu_bar.global_parameters.safe_bounds_margin, 100.0);
+        }
+    }
+
+    #[test]
+    fn menu_bar_close_on_item_click_sets_value() {
+        let items = vec![Item::new(Text::new("File"))];
+        let menu_bar = TestMenuBar::new(items).close_on_item_click(true);
+        assert_eq!(menu_bar.close_on_item_click, Some(true));
+    }
+
+    #[test]
+    fn menu_bar_close_on_background_click_sets_value() {
+        let items = vec![Item::new(Text::new("File"))];
+        let menu_bar = TestMenuBar::new(items).close_on_background_click(true);
+        assert_eq!(menu_bar.close_on_background_click, Some(true));
+    }
+
+    #[test]
+    fn menu_bar_close_on_item_click_global_sets_value() {
+        let items = vec![Item::new(Text::new("File"))];
+        let menu_bar = TestMenuBar::new(items).close_on_item_click_global(true);
+        assert!(menu_bar.global_parameters.close_on_item_click);
+    }
+
+    #[test]
+    fn menu_bar_close_on_background_click_global_sets_value() {
+        let items = vec![Item::new(Text::new("File"))];
+        let menu_bar = TestMenuBar::new(items).close_on_background_click_global(true);
+        assert!(menu_bar.global_parameters.close_on_background_click);
+    }
+
+    #[test]
+    fn menu_bar_with_multiple_items() {
+        let items = vec![
+            Item::new(Text::new("File")),
+            Item::new(Text::new("Edit")),
+            Item::new(Text::new("View")),
+            Item::new(Text::new("Help")),
+        ];
+
+        let menu_bar = TestMenuBar::new(items);
+        assert_eq!(menu_bar.roots.len(), 4);
+    }
+
+    #[test]
+    fn menu_bar_chained_configuration() {
+        let items = vec![Item::new(Text::new("File"))];
+
+        let menu_bar = TestMenuBar::new(items)
+            .width(Length::Fill)
+            .height(Length::Fixed(40.0))
+            .spacing(Pixels(5.0))
+            .padding(Padding::new(10.0))
+            .safe_bounds_margin(75.0)
+            .close_on_item_click(true)
+            .close_on_background_click(true);
+
+        assert_eq!(menu_bar.width, Length::Fill);
+        assert_eq!(menu_bar.height, Length::Fixed(40.0));
+        assert_eq!(menu_bar.spacing, Pixels(5.0));
+        assert_eq!(menu_bar.padding, Padding::new(10.0));
+        #[allow(clippy::float_cmp)]
+        {
+            assert_eq!(menu_bar.global_parameters.safe_bounds_margin, 75.0);
+        }
+        assert_eq!(menu_bar.close_on_item_click, Some(true));
+        assert_eq!(menu_bar.close_on_background_click, Some(true));
+    }
+
+    #[test]
+    fn menu_bar_tag_returns_state_tag() {
+        let items = vec![Item::new(Text::new("File"))];
+        let menu_bar = TestMenuBar::new(items);
+
+        let tag = Widget::<TestMessage, iced_widget::Theme, iced_widget::Renderer>::tag(&menu_bar);
+        assert_eq!(tag, tree::Tag::of::<MenuBarState>());
+    }
+
+    #[test]
+    fn menu_bar_children_returns_item_trees() {
+        let items = vec![Item::new(Text::new("File")), Item::new(Text::new("Edit"))];
+
+        let menu_bar = TestMenuBar::new(items);
+        let children =
+            Widget::<TestMessage, iced_widget::Theme, iced_widget::Renderer>::children(&menu_bar);
+        assert_eq!(children.len(), 2);
+    }
+
+    #[test]
+    fn menu_bar_size_returns_configured_size() {
+        let items = vec![Item::new(Text::new("File"))];
+        let menu_bar = TestMenuBar::new(items)
+            .width(Length::Fill)
+            .height(Length::Fixed(40.0));
+
+        let size =
+            Widget::<TestMessage, iced_widget::Theme, iced_widget::Renderer>::size(&menu_bar);
+        assert_eq!(size.width, Length::Fill);
+        assert_eq!(size.height, Length::Fixed(40.0));
+    }
+
+    #[test]
+    fn menu_bar_converts_to_element() {
+        let items = vec![Item::new(Text::new("File"))];
+        let menu_bar = TestMenuBar::new(items);
+        let _element: Element<TestMessage, iced_widget::Theme, iced_widget::Renderer> =
+            menu_bar.into();
     }
 }

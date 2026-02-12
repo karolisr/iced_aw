@@ -1,11 +1,11 @@
 //! A context menu for showing actions on right click.
 //!
 use iced_core::{
+    Clipboard, Element, Event, Layout, Length, Point, Rectangle, Shell, Vector, Widget,
     layout::{Limits, Node},
     mouse::{self, Button, Cursor},
     overlay, renderer,
-    widget::{tree, Operation, Tree},
-    Clipboard, Element, Event, Layout, Length, Point, Rectangle, Shell, Vector, Widget,
+    widget::{Operation, Tree, tree},
 };
 
 pub use crate::style::{
@@ -54,6 +54,8 @@ pub struct ContextMenu<
     overlay: Overlay,
     /// The style of the [`ContextMenu`].
     class: Theme::Class<'a>,
+    /// Force the menu to be shown (for testing purposes). If None, uses internal state.
+    force_open: Option<bool>,
 }
 
 impl<'a, Overlay, Message, Theme, Renderer> ContextMenu<'a, Overlay, Message, Theme, Renderer>
@@ -76,6 +78,7 @@ where
             underlay: underlay.into(),
             overlay,
             class: Theme::default(),
+            force_open: None,
         }
     }
 
@@ -93,6 +96,15 @@ where
     #[must_use]
     pub fn class(mut self, class: impl Into<Theme::Class<'a>>) -> Self {
         self.class = class.into();
+        self
+    }
+
+    /// Forces the menu to be open or closed, overriding the internal state.
+    /// This is primarily useful for testing purposes.
+    /// If `None`, the menu uses its internal state (toggled by right-click).
+    #[must_use]
+    pub fn open(mut self, open: bool) -> Self {
+        self.force_open = Some(open);
         self
     }
 }
@@ -160,8 +172,9 @@ where
         operation: &mut dyn Operation<()>,
     ) {
         let s: &mut State = state.state.downcast_mut();
+        let show = self.force_open.unwrap_or(s.show);
 
-        if s.show {
+        if show {
             let mut content = (self.overlay)();
             content.as_widget_mut().diff(&mut state.children[1]);
 
@@ -238,8 +251,9 @@ where
         translation: Vector,
     ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
         let s: &mut State = tree.state.downcast_mut();
+        let show = self.force_open.unwrap_or(s.show);
 
-        if !s.show {
+        if !show {
             return self.underlay.as_widget_mut().overlay(
                 &mut tree.children[0],
                 layout,
@@ -294,5 +308,188 @@ impl State {
             show: false,
             cursor_position: Point::ORIGIN,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Clone)]
+    enum TestMessage {}
+
+    type TestContextMenu<'a> = ContextMenu<
+        'a,
+        fn() -> Element<'a, TestMessage, iced_widget::Theme, iced_widget::Renderer>,
+        TestMessage,
+        iced_widget::Theme,
+        iced_widget::Renderer,
+    >;
+
+    fn create_overlay() -> Element<'static, TestMessage, iced_widget::Theme, iced_widget::Renderer>
+    {
+        iced_widget::text::Text::new("Overlay").into()
+    }
+
+    #[test]
+    fn state_new_has_default_values() {
+        let state = State::new();
+        assert!(!state.show);
+        assert_eq!(state.cursor_position, Point::ORIGIN);
+    }
+
+    #[test]
+    fn state_default_trait() {
+        let state = State::default();
+        assert!(!state.show);
+        assert_eq!(state.cursor_position, Point::ORIGIN);
+    }
+
+    #[test]
+    fn context_menu_new_creates_instance() {
+        let underlay = iced_widget::text::Text::new("Underlay");
+        let context_menu = TestContextMenu::new(underlay, create_overlay);
+
+        let size =
+            Widget::<TestMessage, iced_widget::Theme, iced_widget::Renderer>::size(&context_menu);
+        assert_eq!(size.width, Length::Shrink);
+        assert_eq!(size.height, Length::Shrink);
+    }
+
+    #[test]
+    fn context_menu_tag_returns_state_tag() {
+        let underlay = iced_widget::text::Text::new("Underlay");
+        let context_menu = TestContextMenu::new(underlay, create_overlay);
+
+        let tag =
+            Widget::<TestMessage, iced_widget::Theme, iced_widget::Renderer>::tag(&context_menu);
+        assert_eq!(tag, tree::Tag::of::<State>());
+    }
+
+    #[test]
+    fn context_menu_has_two_children() {
+        let underlay = iced_widget::text::Text::new("Underlay");
+        let context_menu = TestContextMenu::new(underlay, create_overlay);
+
+        let children = Widget::<TestMessage, iced_widget::Theme, iced_widget::Renderer>::children(
+            &context_menu,
+        );
+        assert_eq!(children.len(), 2);
+    }
+
+    #[test]
+    fn context_menu_size_matches_underlay() {
+        let underlay = iced_widget::text::Text::new("Underlay");
+        let context_menu = TestContextMenu::new(underlay, create_overlay);
+
+        let size =
+            Widget::<TestMessage, iced_widget::Theme, iced_widget::Renderer>::size(&context_menu);
+        assert_eq!(size.width, Length::Shrink);
+        assert_eq!(size.height, Length::Shrink);
+    }
+
+    #[test]
+    fn state_cursor_position_can_be_set() {
+        let mut state = State::new();
+        state.cursor_position = Point::new(100.0, 200.0);
+        assert_eq!(state.cursor_position.x, 100.0);
+        assert_eq!(state.cursor_position.y, 200.0);
+    }
+
+    #[test]
+    fn state_show_can_be_toggled() {
+        let mut state = State::new();
+        assert!(!state.show);
+
+        state.show = true;
+        assert!(state.show);
+
+        state.show = false;
+        assert!(!state.show);
+    }
+
+    #[test]
+    fn state_allows_show_and_position_updates() {
+        // Test that State can track show status and cursor position
+        // This exercises the internal state logic used by update()
+        let mut state = State::new();
+
+        // Initially not shown
+        assert!(!state.show);
+        assert_eq!(state.cursor_position, Point::ORIGIN);
+
+        // Simulate right-click at position
+        state.show = !state.show;
+        state.cursor_position = Point::new(10.0, 10.0);
+
+        assert!(state.show);
+        assert_eq!(state.cursor_position, Point::new(10.0, 10.0));
+
+        // Simulate toggle off
+        state.show = !state.show;
+        assert!(!state.show);
+    }
+
+    #[test]
+    fn widget_state_creates_correct_initial_state() {
+        // Test that widget creates correct initial state
+        let underlay = iced_widget::text::Text::new("Underlay");
+        let context_menu = TestContextMenu::new(underlay, create_overlay);
+
+        let state =
+            Widget::<TestMessage, iced_widget::Theme, iced_widget::Renderer>::state(&context_menu);
+
+        // Verify state is created with correct type
+        let s: &State = state.downcast_ref();
+        assert!(!s.show);
+        assert_eq!(s.cursor_position, Point::ORIGIN);
+    }
+
+    #[test]
+    fn widget_children_returns_two_elements() {
+        // Test that children() returns underlay and overlay
+        let underlay = iced_widget::text::Text::new("Underlay");
+        let context_menu = TestContextMenu::new(underlay, create_overlay);
+
+        let children = Widget::<TestMessage, iced_widget::Theme, iced_widget::Renderer>::children(
+            &context_menu,
+        );
+
+        // Should have 2 children: underlay and overlay
+        assert_eq!(children.len(), 2);
+    }
+
+    #[test]
+    fn open_method_sets_force_open_to_true() {
+        let underlay = iced_widget::text::Text::new("Underlay");
+        let context_menu = TestContextMenu::new(underlay, create_overlay).open(true);
+
+        assert_eq!(context_menu.force_open, Some(true));
+    }
+
+    #[test]
+    fn open_method_sets_force_open_to_false() {
+        let underlay = iced_widget::text::Text::new("Underlay");
+        let context_menu = TestContextMenu::new(underlay, create_overlay).open(false);
+
+        assert_eq!(context_menu.force_open, Some(false));
+    }
+
+    #[test]
+    fn open_method_can_be_chained() {
+        let underlay = iced_widget::text::Text::new("Underlay");
+        let context_menu = TestContextMenu::new(underlay, create_overlay)
+            .open(true)
+            .class(<iced_widget::Theme as crate::style::context_menu::Catalog>::default());
+
+        assert_eq!(context_menu.force_open, Some(true));
+    }
+
+    #[test]
+    fn default_force_open_is_none() {
+        let underlay = iced_widget::text::Text::new("Underlay");
+        let context_menu = TestContextMenu::new(underlay, create_overlay);
+
+        assert_eq!(context_menu.force_open, None);
     }
 }
